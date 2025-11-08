@@ -179,8 +179,13 @@ function showMessage(txt,timeout=2000){
 	messageEl.textContent = txt;
 	messageEl.style.opacity = '1';
 	messageEl.style.transform = 'translateY(0)';
-	
-	if(timeout) {
+	// If win, persist message in localStorage
+	if (txt === 'You win! 🎉' || txt === 'You Win') {
+		try { localStorage.setItem('wordle-win-message', 'You Win'); } catch(e) {}
+	} else if (txt && txt !== 'You Win') {
+		try { localStorage.removeItem('wordle-win-message'); } catch(e) {}
+	}
+	if(timeout && txt !== 'You Win') {
 		setTimeout(()=>{ 
 			if(messageEl.textContent===txt) {
 				messageEl.style.opacity = '0';
@@ -194,7 +199,9 @@ function showMessage(txt,timeout=2000){
 }
 
 function evaluateGuess(guess, solutionStr){
-	// both lowercase strings
+	// ensure both guess and solution are lowercase for comparison
+	guess = guess.toLowerCase();
+	solutionStr = solutionStr.toLowerCase();
 	const res = Array(COLS).fill('absent');
 	const solArr = solutionStr.split('');
 	// first pass: correct
@@ -230,7 +237,7 @@ function applyResultToRow(r, statuses){
 
 function updateKeyboard(guess, statuses){
 	for(let i=0;i<guess.length;i++){
-		const letter = guess[i];
+		const letter = guess[i].toLowerCase();
 		const btn = Array.from(document.querySelectorAll('.key')).find(b=>b.textContent.toLowerCase()===letter);
 		if(!btn) continue;
 		// priority: correct > present > absent
@@ -299,8 +306,8 @@ async function onEnter(){
 	guesses[curRow] = guess;
 	saveState();
 
-		if(guess === solution){
-			showMessage('You win! 🎉', 4000);
+		if(guess.toLowerCase() === solution.toLowerCase()){
+			showMessage('You Win');
 			curRow = ROWS; // lock further input
 			// mark as played for today
 			try{ localStorage.setItem(playedKey(),'true'); }catch(e){}
@@ -319,7 +326,6 @@ async function onEnter(){
 
 function resetGameLocal(){
 	if(localStorage.getItem(playedKey()) === 'true'){
-		showMessage('You already played today');
 		return;
 	}
 	guesses = [];
@@ -327,6 +333,13 @@ function resetGameLocal(){
 	localStorage.removeItem(storageKey());
 	buildBoard();
 	loadState();
+	// Show win message if previously won
+	const winMsg = localStorage.getItem('wordle-win-message');
+	if (winMsg === 'You Win') {
+		showMessage('You Win', 0);
+		messageEl.style.opacity = '1';
+		messageEl.style.transform = 'translateY(0)';
+	}
 }
 
 async function init(){
@@ -353,7 +366,6 @@ async function init(){
 		// If the user already played today, lock input
 		if(localStorage.getItem(playedKey()) === 'true'){
 			locked = true;
-			showMessage('You already played today');
 		}
 	loadState();
 
