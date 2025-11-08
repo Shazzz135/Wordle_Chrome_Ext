@@ -1,0 +1,16 @@
+{
+	"manifest_version": 3,
+	"name": "Mini Wordle Popup",
+	"version": "0.1.0",
+	"description": "Play today's Wordle in a popup. Fetches daily solution from NYT API.",
+	"action": {
+		"default_popup": "popup/popup.html",
+		"default_title": "Wordle Popup"
+	},
+	"permissions": [
+		"storage"
+	],
+	"host_permissions": [
+		"https://www.nytimes.com/svc/wordle/v2/*"
+	]
+}
