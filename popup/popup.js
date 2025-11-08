@@ -258,8 +258,12 @@ function updateKeyboard(guess, statuses){
 }
 
 function saveState(){
-	const payload = { guesses, curRow, curCol };
-	try{ localStorage.setItem(storageKey(), JSON.stringify(payload)); }catch(e){/*ignore*/}
+	// sanitize guesses before saving: only keep A-Z letters, no spaces or other chars
+	try{
+		const sanitized = guesses.map(g => typeof g === 'string' ? g.replace(/[^a-zA-Z]/g,'') : '');
+		const payload = { guesses: sanitized, curRow, curCol };
+		localStorage.setItem(storageKey(), JSON.stringify(payload));
+	}catch(e){/*ignore*/}
 }
 
 function loadState(){
@@ -268,24 +272,42 @@ function loadState(){
 		if(!raw) return;
 		const obj = JSON.parse(raw);
 		if(obj && Array.isArray(obj.guesses)){
-			guesses = obj.guesses.slice(0);
-			curRow = obj.curRow || guesses.length;
-			curCol = obj.curCol || 0;
+			// sanitize incoming guesses: remove spaces and any non-letter characters
+			const sanitized = obj.guesses.map(g => typeof g === 'string' ? g.replace(/[^a-zA-Z]/g,'') : '');
+			guesses = sanitized.slice(0, ROWS);
+
 			// render guesses
 			for(let r=0;r<guesses.length && r<ROWS;r++){
-				const g = guesses[r];
+				const g = guesses[r] || '';
 				for(let c=0;c<COLS;c++){
-					const ch = g[c] || '';
+					const ch = (g[c] && /[a-zA-Z]/.test(g[c])) ? g[c] : '';
 					const cell = document.querySelector(`.cell[data-r='${r}'][data-c='${c}']`);
-					if(cell){ cell.textContent = ch; if(ch) cell.classList.add('filled'); }
+					if(cell){ cell.textContent = ch ? ch.toUpperCase() : ''; if(ch) cell.classList.add('filled'); }
 				}
-				// apply previous coloring if solution known
-				if(solution) {
+				// apply previous coloring if solution known and row is complete
+				if(solution && g && g.length === COLS) {
 					const st = evaluateGuess(g, solution);
 					applyResultToRow(r, st);
 					updateKeyboard(g, st);
 				}
 			}
+
+			// compute current cursor (first empty cell in first incomplete row)
+			let found = false;
+			for(let r=0;r<ROWS;r++){
+				let filled = 0;
+				for(let c=0;c<COLS;c++){
+					const cell = document.querySelector(`.cell[data-r='${r}'][data-c='${c}']`);
+					if(cell && cell.textContent && cell.textContent.trim() !== '') filled++;
+				}
+				if(filled < COLS){
+					curRow = r;
+					curCol = filled;
+					found = true;
+					break;
+				}
+			}
+			if(!found){ curRow = guesses.length; curCol = 0; }
 		}
 	}catch(e){console.warn('loadState failed',e)}
 }
@@ -363,11 +385,36 @@ async function init(){
 			}
 		}
 
-		// If the user already played today, lock input
-		if(localStorage.getItem(playedKey()) === 'true'){
-			locked = true;
-		}
-	loadState();
+		// Load any saved board state first (so we can validate whether the "played" flag is legitimate)
+		loadState();
+
+		// If the user already played today, only lock input when the saved state actually
+		// indicates the game is finished (win or out of guesses). This avoids a stale
+		// played flag blocking input when the popup was simply closed mid-game.
+		try{
+			const pk = localStorage.getItem(playedKey());
+			if(pk === 'true'){
+				const hasWon = guesses.some(g => typeof g === 'string' && g.toLowerCase() === (solution || '').toLowerCase());
+				if(hasWon || curRow >= ROWS){
+					locked = true;
+				}else{
+					// Inconsistent: clear the played flag so the user can continue playing
+					try{ localStorage.removeItem(playedKey()); }catch(e){}
+					locked = false;
+				}
+			}
+		}catch(e){console.warn('playedKey check failed', e)}
+
+		// If the user previously won, persistently show the win message when the popup opens
+		try{
+			const winMsg = localStorage.getItem('wordle-win-message');
+			if(winMsg === 'You Win'){
+				// show without timeout so it stays visible while popup is open
+				showMessage('You Win', 0);
+				messageEl.style.opacity = '1';
+				messageEl.style.transform = 'translateY(0)';
+			}
+		}catch(e){/*ignore*/}
 
 	// Enhanced keyboard physical input
 	document.addEventListener('keydown', (e)=>{
