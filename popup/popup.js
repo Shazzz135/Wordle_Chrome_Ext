@@ -176,15 +176,28 @@ function getGuessAtRow(r){
 }
 
 function showMessage(txt,timeout=2000){
-	messageEl.textContent = txt;
-	messageEl.style.opacity = '1';
-	messageEl.style.transform = 'translateY(0)';
-	// If win, persist message in localStorage
+	// Persist win message immediately (per-day) but delay the visual pop for wins
+	const winKey = `wordle-win-message-${formatDate()}`;
 	if (txt === 'You win! 🎉' || txt === 'You Win') {
-		try { localStorage.setItem('wordle-win-message', 'You Win'); } catch(e) {}
+		try { localStorage.setItem(winKey, 'You Win'); } catch(e) {}
 	} else if (txt && txt !== 'You Win') {
-		try { localStorage.removeItem('wordle-win-message'); } catch(e) {}
+		try { localStorage.removeItem(winKey); } catch(e) {}
 	}
+
+	const doShow = () => {
+		messageEl.textContent = txt;
+		messageEl.style.opacity = '1';
+		messageEl.style.transform = 'translateY(0)';
+	};
+
+	// If this is a win message and the caller didn't ask for it to be persistent
+	// (timeout !== 0), add a 1s delay before showing the visual message.
+	if ((txt === 'You win! 🎉' || txt === 'You Win') && timeout !== 0) {
+		setTimeout(doShow, 1000);
+	} else {
+		doShow();
+	}
+
 	if(timeout && txt !== 'You Win') {
 		setTimeout(()=>{ 
 			if(messageEl.textContent===txt) {
@@ -355,8 +368,8 @@ function resetGameLocal(){
 	localStorage.removeItem(storageKey());
 	buildBoard();
 	loadState();
-	// Show win message if previously won
-	const winMsg = localStorage.getItem('wordle-win-message');
+	// Show win message if previously won today
+	const winMsg = localStorage.getItem(`wordle-win-message-${formatDate()}`);
 	if (winMsg === 'You Win') {
 		showMessage('You Win', 0);
 		messageEl.style.opacity = '1';
@@ -405,9 +418,9 @@ async function init(){
 			}
 		}catch(e){console.warn('playedKey check failed', e)}
 
-		// If the user previously won, persistently show the win message when the popup opens
+		// If the user previously won today, persistently show the win message when the popup opens
 		try{
-			const winMsg = localStorage.getItem('wordle-win-message');
+			const winMsg = localStorage.getItem(`wordle-win-message-${formatDate()}`);
 			if(winMsg === 'You Win'){
 				// show without timeout so it stays visible while popup is open
 				showMessage('You Win', 0);
